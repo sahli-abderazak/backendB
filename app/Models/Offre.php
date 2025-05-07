@@ -52,5 +52,8 @@ class Offre extends Model
     ];
 
 
-    
+    public function candidats()
+{
+    return $this->hasMany(\App\Models\Candidat::class, 'offre_id');
+}
 }

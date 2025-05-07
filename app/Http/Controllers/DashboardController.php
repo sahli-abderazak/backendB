@@ -35,66 +35,112 @@ class DashboardController extends Controller
             'entretiensTendance' => $entretiensTendance
         ]);
     }
-    
-    public function getCandidatsParDepartement()
-    {
-        $data = DB::table('candidats')
-            ->join('offres', 'candidats.offre_id', '=', 'offres.id')
-            ->select('offres.departement', DB::raw('count(*) as total'))
-            ->groupBy('offres.departement')
-            ->get();
+        // Méthodes utilitaires
+        private function getTendance($table)
+        {
+            $startDate = Carbon::now()->subDays(7);
+            $endDate = Carbon::now();
             
-        return response()->json($data);
-    }
-    
-    public function getCandidatsParMois()
-    {
-        $data = DB::table('candidats')
-            ->select(
-                DB::raw('MONTH(created_at) as mois'),
-                DB::raw('YEAR(created_at) as annee'),
-                DB::raw('count(*) as total')
-            )
-            ->whereYear('created_at', date('Y'))
-            ->groupBy('mois', 'annee')
-            ->orderBy('annee')
-            ->orderBy('mois')
-            ->get()
-            ->map(function ($item) {
-                $moisNoms = [
-                    1 => 'Jan', 2 => 'Fév', 3 => 'Mar', 4 => 'Avr',
-                    5 => 'Mai', 6 => 'Juin', 7 => 'Juil', 8 => 'Août',
-                    9 => 'Sep', 10 => 'Oct', 11 => 'Nov', 12 => 'Déc'
-                ];
+            $data = DB::table($table)
+                ->whereBetween('created_at', [$startDate, $endDate])
+                ->select(
+                    DB::raw('DATE(created_at) as jour'),
+                    DB::raw('count(*) as total')
+                )
+                ->groupBy('jour')
+                ->get()
+                ->map(function ($item) {
+                    $joursSemaine = [
+                        0 => 'Dim', 1 => 'Lun', 2 => 'Mar', 3 => 'Mer',
+                        4 => 'Jeu', 5 => 'Ven', 6 => 'Sam'
+                    ];
+                    
+                    $date = Carbon::parse($item->jour);
+                    
+                    return [
+                        'name' => $joursSemaine[$date->dayOfWeek],
+                        'value' => $item->total
+                    ];
+                });
                 
-                return [
-                    'name' => $moisNoms[$item->mois],
-                    'Candidats' => $item->total
-                ];
-            });
-            
-        return response()->json($data);
-    }
+            return $data;
+        }
+        public function getCandidatsParDepartementRec(Request $request)
+        {
+            $societe = $request->user()->nom_societe;
+        
+            $data = DB::table('candidats')
+                ->join('offres', 'candidats.offre_id', '=', 'offres.id')
+                ->where('offres.societe', $societe)
+                ->select('offres.departement', DB::raw('count(*) as total'))
+                ->groupBy('offres.departement')
+                ->get()
+                ->map(function ($item) {
+                    return [
+                        'name' => $item->departement,
+                        'value' => $item->total
+                    ];
+                });
+        
+            return response()->json($data);
+        }
     
-    public function getOffresParDepartement()
-    {
-        $data = DB::table('offres')
-            ->select('departement', DB::raw('count(*) as total'))
-            ->groupBy('departement')
-            ->get()
-            ->map(function ($item) {
-                return [
-                    'name' => $item->departement,
-                    'value' => $item->total
-                ];
-            });
-            
-        return response()->json($data);
-    }
+        public function getCandidatsParMoisRec(Request $request)
+        {
+            $societe = $request->user()->nom_societe;
+        
+            $data = DB::table('candidats')
+                ->join('offres', 'candidats.offre_id', '=', 'offres.id')
+                ->where('offres.societe', $societe)
+                ->select(
+                    DB::raw('MONTH(candidats.created_at) as mois'),
+                    DB::raw('YEAR(candidats.created_at) as annee'),
+                    DB::raw('count(*) as total')
+                )
+                ->whereYear('candidats.created_at', date('Y'))
+                ->groupBy('mois', 'annee')
+                ->orderBy('annee')
+                ->orderBy('mois')
+                ->get()
+                ->map(function ($item) {
+                    $moisNoms = [
+                        1 => 'Jan', 2 => 'Fév', 3 => 'Mar', 4 => 'Avr',
+                        5 => 'Mai', 6 => 'Juin', 7 => 'Juil', 8 => 'Août',
+                        9 => 'Sep', 10 => 'Oct', 11 => 'Nov', 12 => 'Déc'
+                    ];
+                    return [
+                        'name' => $moisNoms[$item->mois],
+                        'Candidats' => $item->total
+                    ];
+                });
+        
+            return response()->json($data);
+        }
     
-    public function getEntretiensParStatut()
+        public function getOffresParDepartementRec(Request $request)
+        {
+            $societe = $request->user()->nom_societe;
+        
+            $data = DB::table('offres')
+                ->where('societe', $societe)
+                ->select('departement', DB::raw('count(*) as total'))
+                ->groupBy('departement')
+                ->get()
+                ->map(function ($item) {
+                    return [
+                        'name' => $item->departement,
+                        'value' => $item->total
+                    ];
+                });
+        
+            return response()->json($data);
+        }
+    
+    public function getEntretiensParStatutRec(Request $request)
     {
+        $societe = $request->user()->id;
         $data = DB::table('interviews')
+        ->where('recruteur_id', $societe)
             ->select('status', DB::raw('count(*) as total'))
             ->groupBy('status')
             ->get()
@@ -108,11 +154,15 @@ class DashboardController extends Controller
         return response()->json($data);
     }
     
-    public function getCandidatsParNiveau()
+    public function getCandidatsParNiveauRec(Request $request)
     {
+        $societe = $request->user()->nom_societe;
+    
         $data = DB::table('candidats')
-            ->select('niveauEtude', DB::raw('count(*) as total'))
-            ->groupBy('niveauEtude')
+            ->join('offres', 'candidats.offre_id', '=', 'offres.id')
+            ->where('offres.societe', $societe)
+            ->select('candidats.niveauEtude', DB::raw('count(*) as total'))
+            ->groupBy('candidats.niveauEtude')
             ->get()
             ->map(function ($item) {
                 return [
@@ -120,91 +170,179 @@ class DashboardController extends Controller
                     'value' => $item->total
                 ];
             });
-            
+    
         return response()->json($data);
     }
     
     // Stats pour Recruteur
     public function getRecruteurStats(Request $request)
     {
-        $recruteurId = $request->user()->id;
-        
+        $societe = $request->user()->nom_societe;
         $totalMesCandidats = DB::table('candidats')
             ->join('offres', 'candidats.offre_id', '=', 'offres.id')
-            ->where('offres.responsabilite', $recruteurId)
+            ->where('offres.societe', $societe)
             ->count();
-            
-        $totalMesOffres = Offre::where('responsabilite', $recruteurId)->count();
-        
+    
+        $totalMesOffres = Offre::where('societe', $societe)->count();
+    
         $totalMesEntretiens = DB::table('interviews')
-            ->where('recruteur_id', $recruteurId)
+            ->join('offres', 'interviews.offre_id', '=', 'offres.id')
+            ->where('offres.societe', $societe)
             ->count();
-            
+    
         $entretiensPending = DB::table('interviews')
-            ->where('recruteur_id', $recruteurId)
-            ->where('status', 'pending')
+            ->join('offres', 'interviews.offre_id', '=', 'offres.id')
+            ->where('offres.societe', $societe)
+            ->where('interviews.status', 'pending')
             ->count();
-            
-        // Tendances des derniers 7 jours pour ce recruteur
-        $candidatsTendance = $this->getTendanceRecruteur('candidats', $recruteurId);
-        $entretiensTendance = $this->getTendanceRecruteur('interviews', $recruteurId);
-        
+    
+        $candidatsTendance = $this->getTendanceRecruteurCandidats($societe);
+        $entretiensTendance = $this->getTendanceRecruteurEntretiens($societe);
+    
         return response()->json([
             'totalMesCandidats' => $totalMesCandidats,
             'totalMesOffres' => $totalMesOffres,
             'totalMesEntretiens' => $totalMesEntretiens,
             'entretiensPending' => $entretiensPending,
             'candidatsTendance' => $candidatsTendance,
-            'entretiensTendance' => $entretiensTendance
+            'entretiensTendance' => $entretiensTendance,
+            'ste'=> $societe
         ]);
     }
     
-    public function getMesOffres(Request $request)
+    // Tendance candidats pour une société (7 derniers jours)
+    private function getTendanceRecruteurCandidats($societe)
     {
-        $recruteurId = $request->user()->id;
-        
-        $data = Offre::where('responsabilite', $recruteurId)
-            ->select('poste', 'dateExpiration', 'id')
-            ->withCount('candidats')
-            ->get()
-            ->map(function ($offre) {
-                return [
-                    'name' => $offre->poste,
-                    'value' => $offre->candidats_count,
-                    'id' => $offre->id,
-                    'expiration' => $offre->dateExpiration
-                ];
-            });
-            
-        return response()->json($data);
+        $startDate = Carbon::now()->subDays(7);
+        $endDate = Carbon::now();
+    
+        $data = DB::table('candidats')
+            ->join('offres', 'candidats.offre_id', '=', 'offres.id')
+            ->where('offres.societe', $societe)
+            ->whereBetween('candidats.created_at', [$startDate, $endDate])
+            ->select(
+                DB::raw('DATE(candidats.created_at) as jour'),
+                DB::raw('count(*) as total')
+            )
+            ->groupBy('jour')
+            ->get();
+    
+        $joursSemaine = [
+            0 => 'Dim', 1 => 'Lun', 2 => 'Mar', 3 => 'Mer',
+            4 => 'Jeu', 5 => 'Ven', 6 => 'Sam'
+        ];
+    
+        return $data->map(function ($item) use ($joursSemaine) {
+            $date = Carbon::parse($item->jour);
+            return [
+                'name' => $joursSemaine[$date->dayOfWeek],
+                'value' => $item->total
+            ];
+        });
     }
     
-    public function getMesEntretiens(Request $request)
+    // Tendance entretiens pour une société (7 derniers jours)
+    private function getTendanceRecruteurEntretiens($societe)
     {
-        $recruteurId = $request->user()->id;
-        
+        $startDate = Carbon::now()->subDays(7);
+        $endDate = Carbon::now();
+    
         $data = DB::table('interviews')
-            ->where('recruteur_id', $recruteurId)
-            ->select('status', DB::raw('count(*) as total'))
-            ->groupBy('status')
+            ->join('offres', 'interviews.offre_id', '=', 'offres.id')
+            ->where('offres.societe', $societe)
+            ->whereBetween('interviews.created_at', [$startDate, $endDate])
+            ->select(
+                DB::raw('DATE(interviews.created_at) as jour'),
+                DB::raw('count(*) as total')
+            )
+            ->groupBy('jour')
+            ->get();
+    
+        $joursSemaine = [
+            0 => 'Dim', 1 => 'Lun', 2 => 'Mar', 3 => 'Mer',
+            4 => 'Jeu', 5 => 'Ven', 6 => 'Sam'
+        ];
+    
+        return $data->map(function ($item) use ($joursSemaine) {
+            $date = Carbon::parse($item->jour);
+            return [
+                'name' => $joursSemaine[$date->dayOfWeek],
+                'value' => $item->total
+            ];
+        });
+    }
+    
+    public function getMesOffres(Request $request)
+{
+
+    $societe = $request->user()->nom_societe;
+
+    $offres = Offre::where('societe', $societe)  ->withCount('candidats')
+    ->get()
+        ->map(function ($offre) {
+            return [
+                'id' => $offre->id,
+                'poste' => $offre->poste,
+                'nbrCandidat' => $offre->candidats_count,
+                'expiration' => $offre->dateExpiration,
+            ];
+        });
+
+    return response()->json($offres);
+}
+
+    
+public function getMesEntretiens(Request $request)
+{
+    $entretiens = DB::table('interviews')
+        ->join('candidats', 'interviews.candidat_id', '=', 'candidats.id')
+        ->join('offres', 'interviews.offre_id', '=', 'offres.id')
+        ->where('offres.societe', $request->user()->nom_societe)
+        ->where('interviews.status', 'pending')
+        ->where('interviews.date_heure', '>=', now())
+        ->select(
+            'interviews.id',
+            'candidats.nom as candidat_nom',
+            'candidats.prenom as candidat_prenom',
+            'offres.poste as poste',
+            'interviews.date_heure',
+            'interviews.type',
+            'interviews.lien_ou_adresse',
+            'interviews.status'
+        )
+        ->orderBy('interviews.date_heure', 'asc')
+        ->limit(3)
+        ->get();
+
+    return response()->json($entretiens);
+}
+
+    
+    public function getCandidatsParOffre(Request $request)
+    {
+        $societe = $request->user()->nom_societe;
+        
+        $data = DB::table('candidats')
+            ->join('offres', 'candidats.offre_id', '=', 'offres.id')
+            ->where('offres.societe', $societe)
+            ->select('offres.poste', DB::raw('count(*) as total'))
+            ->groupBy('offres.poste')
             ->get()
             ->map(function ($item) {
                 return [
-                    'name' => $item->status,
+                    'name' => $item->poste,
                     'value' => $item->total
                 ];
             });
             
         return response()->json($data);
     }
-    
-    public function getCandidatsParOffre(Request $request)
-    {
-        $recruteurId = $request->user()->id;
+    public function getCandidatsParPoste(Request $request){
+        $societe = $request->user()->nom_societe;
         
         $data = DB::table('candidats')
             ->join('offres', 'candidats.offre_id', '=', 'offres.id')
-            ->where('offres.responsabilite', $recruteurId)
+            ->where('offres.societe', $societe)
             ->select('offres.poste', DB::raw('count(*) as total'))
             ->groupBy('offres.poste')
             ->get()
@@ -250,77 +388,6 @@ class DashboardController extends Controller
         return response()->json($data);
     }
     
-    // Méthodes utilitaires
-    private function getTendance($table)
-    {
-        $startDate = Carbon::now()->subDays(7);
-        $endDate = Carbon::now();
-        
-        $data = DB::table($table)
-            ->whereBetween('created_at', [$startDate, $endDate])
-            ->select(
-                DB::raw('DATE(created_at) as jour'),
-                DB::raw('count(*) as total')
-            )
-            ->groupBy('jour')
-            ->get()
-            ->map(function ($item) {
-                $joursSemaine = [
-                    0 => 'Dim', 1 => 'Lun', 2 => 'Mar', 3 => 'Mer',
-                    4 => 'Jeu', 5 => 'Ven', 6 => 'Sam'
-                ];
-                
-                $date = Carbon::parse($item->jour);
-                
-                return [
-                    'name' => $joursSemaine[$date->dayOfWeek],
-                    'value' => $item->total
-                ];
-            });
-            
-        return $data;
-    }
-    
-    private function getTendanceRecruteur($table, $recruteurId)
-    {
-        $startDate = Carbon::now()->subDays(7);
-        $endDate = Carbon::now();
-        
-        if ($table === 'candidats') {
-            $data = DB::table('candidats')
-                ->join('offres', 'candidats.offre_id', '=', 'offres.id')
-                ->where('offres.responsabilite', $recruteurId)
-                ->whereBetween('candidats.created_at', [$startDate, $endDate])
-                ->select(
-                    DB::raw('DATE(candidats.created_at) as jour'),
-                    DB::raw('count(*) as total')
-                )
-                ->groupBy('jour')
-                ->get();
-        } else {
-            $data = DB::table($table)
-                ->where('recruteur_id', $recruteurId)
-                ->whereBetween('created_at', [$startDate, $endDate])
-                ->select(
-                    DB::raw('DATE(created_at) as jour'),
-                    DB::raw('count(*) as total')
-                )
-                ->groupBy('jour')
-                ->get();
-        }
-        
-        return $data->map(function ($item) {
-            $joursSemaine = [
-                0 => 'Dim', 1 => 'Lun', 2 => 'Mar', 3 => 'Mer',
-                4 => 'Jeu', 5 => 'Ven', 6 => 'Sam'
-            ];
-            
-            $date = Carbon::parse($item->jour);
-            
-            return [
-                'name' => $joursSemaine[$date->dayOfWeek],
-                'value' => $item->total
-            ];
-        });
-    }
+
+   
 }
