@@ -176,6 +176,11 @@ Route::middleware('auth:sanctum')->group(function () {
     // Routes pour le dashboard admin
     Route::prefix('admin')->group(function () {
         Route::get('/stats', [DashboardController::class, 'getAdminStats']);
+        Route::get('/candidats-par-departement', [DashboardController::class, 'getCandidatsParDepartement']);
+        Route::get('/candidats-par-mois', [DashboardController::class, 'getCandidatsParMois']);
+        Route::get('/offres-par-departement', [DashboardController::class, 'getOffresParDepartement']);
+        Route::get('/entretiens-par-statut', [DashboardController::class, 'getEntretiensParStatut']);
+        Route::get('/candidats-par-niveau', [DashboardController::class, 'getCandidatsParNiveau']);
       
     });
     
